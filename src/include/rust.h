@@ -27,18 +27,12 @@ struct ResultCString {
   };
 };
 
+using DuckDBMallocFunctionType = void*(*)(size_t);
+
+using DuckDBFreeFunctionType = void(*)(void*);
+
 
 extern "C" {
-
-///Free a value returned from `duckdb_malloc`, `duckdb_value_varchar`, `duckdb_value_blob`, or `duckdb_value_string`.
-///
-/// ptr: The memory region to de-allocate.
-extern void duckdb_free(void *ptr);
-
-///Allocate `size` bytes of memory using the duckdb internal malloc function. Any memory allocated in this manner should be freed using `duckdb_free`.
-///
-/// size: The number of bytes to allocate.  returns: A pointer to the allocated memory region.
-extern void *duckdb_malloc(size_t size);
 
 /// Hash a varchar using the specified hashing algorithm.
 ResultCString hashing_varchar(const char *hash_name,
@@ -53,5 +47,7 @@ ResultCString hmac_varchar(const char *hash_name,
                            size_t key_len,
                            const char *content,
                            size_t len);
+
+void init_memory_allocation(DuckDBMallocFunctionType malloc_fn, DuckDBFreeFunctionType free_fn);
 
 } // extern "C"

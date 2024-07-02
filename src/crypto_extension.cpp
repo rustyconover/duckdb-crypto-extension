@@ -63,6 +63,9 @@ inline void CryptoScalarHmacFun(DataChunk &args, ExpressionState &state, Vector 
 
 
 static void LoadInternal(DatabaseInstance &instance) {
+    // Pass the allocation functions to Rust so that it can call duckdb_malloc and duckdb_free
+    init_memory_allocation(duckdb_malloc, duckdb_free);
+
     auto crypto_hash_scalar_function = ScalarFunction("crypto_hash", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR, CryptoScalarHashFun);
     ExtensionUtil::RegisterFunction(instance, crypto_hash_scalar_function);
 

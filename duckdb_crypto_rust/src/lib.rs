@@ -1,7 +1,9 @@
+use std::alloc::Layout;
 use std::ffi::{c_char, c_uchar, c_void, CString};
 use std::ptr;
 use std::slice;
 use std::str;
+use std::sync::Once;
 
 use digest::{DynDigest, Mac};
 
@@ -93,22 +95,15 @@ pub extern "C" fn hashing_varchar(
             // Now hex encode the byte string.
             let hex_encoded = base16ct::lower::encode_string(&hash_result);
 
-            match CString::new(hex_encoded) {
-                Ok(c_string) => ResultCString::Ok(c_string.into_raw()),
-                Err(_) => ResultCString::Ok(ptr::null_mut()),
-            }
+            ResultCString::Ok(create_cstring_with_custom_allocator(&hex_encoded).into_raw())
         }
         None => {
-            let error_message = CString::new(format!(
+            let error_message = format!(
                 "Invalid hash algorithm '{}' available algorithms are: {}",
                 hash_name_str,
                 available_hash_algorithms().join(", ")
-            ))
-            .unwrap();
-            match CString::new(error_message) {
-                Ok(c_string) => ResultCString::Err(c_string.into_raw()),
-                Err(_) => ResultCString::Err(ptr::null_mut()),
-            }
+            );
+            ResultCString::Err(create_cstring_with_custom_allocator(&error_message).into_raw())
         }
     }
 }
@@ -122,15 +117,11 @@ macro_rules! make_hmac {
             Ok(final_result) => {
                 let hex_encoded =
                     base16ct::lower::encode_string(final_result.into_bytes().as_slice());
-                CString::new(hex_encoded)
-                    .map(|c_string| ResultCString::Ok(c_string.into_raw()))
-                    .unwrap_or(ResultCString::Ok(ptr::null_mut()))
+                ResultCString::Ok(create_cstring_with_custom_allocator(&hex_encoded).into_raw())
             }
             Err(_) => {
                 let error_message = "Failed to create HMAC";
-                CString::new(error_message)
-                    .map(|c_string| ResultCString::Err(c_string.into_raw()))
-                    .unwrap_or(ResultCString::Err(ptr::null_mut()))
+                ResultCString::Err(create_cstring_with_custom_allocator(&error_message).into_raw())
             }
         }
     };
@@ -206,53 +197,63 @@ pub extern "C" fn hmac_varchar(
             make_hmac!(sha3::Sha3_512, key_slice, content_slice)
         }
         _ => {
-            let error_message = CString::new(format!(
+            let error_message = format!(
                 "Invalid hash algorithm '{}' available algorithms are: {}",
                 hash_name_str,
                 available_hash_algorithms().join(", ")
-            ))
-            .unwrap();
-            match CString::new(error_message) {
-                Ok(c_string) => ResultCString::Err(c_string.into_raw()),
-                Err(_) => ResultCString::Err(ptr::null_mut()),
-            }
+            );
+            ResultCString::Err(create_cstring_with_custom_allocator(&error_message).into_raw())
         }
+    }
+}
+
+fn create_cstring_with_custom_allocator(s: &str) -> CString {
+    // Convert the input string to a CString
+    let c_string = CString::new(s).expect("CString::new failed");
+
+    // Duplicate the CString using the global allocator
+    let len = c_string.as_bytes_with_nul().len();
+    let layout = Layout::from_size_align(len, 1).unwrap();
+
+    unsafe {
+        let ptr = ALLOCATOR.malloc.unwrap()(layout.size()) as *mut c_char;
+        if ptr.is_null() {
+            panic!("Failed to allocate memory from duckdb");
+        }
+        ptr::copy_nonoverlapping(c_string.as_ptr(), ptr, len);
+        CString::from_raw(ptr)
     }
 }
 
 #[cfg(test)]
 mod tests {}
 
-// Setup the global allocator to use the duckdb internal malloc and free functions.
-extern "C" {
-    #[doc = "Allocate `size` bytes of memory using the duckdb internal malloc function. Any memory allocated in this manner\nshould be freed using `duckdb_free`.\n\n size: The number of bytes to allocate.\n returns: A pointer to the allocated memory region."]
-    pub fn duckdb_malloc(size: usize) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    #[doc = "Free a value returned from `duckdb_malloc`, `duckdb_value_varchar`, `duckdb_value_blob`, or\n`duckdb_value_string`.\n\n ptr: The memory region to de-allocate."]
-    pub fn duckdb_free(ptr: *mut ::std::os::raw::c_void);
+type DuckDBMallocFunctionType = unsafe extern "C" fn(usize) -> *mut ::std::os::raw::c_void;
+type DuckDBFreeFunctionType = unsafe extern "C" fn(*mut c_void);
+
+struct Allocator {
+    malloc: Option<DuckDBMallocFunctionType>,
+    free: Option<DuckDBFreeFunctionType>,
 }
 
-use std::alloc::{GlobalAlloc, Layout};
+// Create a global instance of the Allocator struct.
+static mut ALLOCATOR: Allocator = Allocator {
+    malloc: None,
+    free: None,
+};
 
-// Implement a Rust allocator that calls duckdb_malloc and duckdb_free and use it as the global allocator.
-struct DuckDBAllocator {}
+// A Once instance to ensure that the allocator is only initialized once.
+static INIT: Once = Once::new();
 
-impl DuckDBAllocator {
-    const fn new() -> Self {
-        DuckDBAllocator {}
+#[no_mangle]
+pub extern "C" fn init_memory_allocation(
+    malloc_fn: DuckDBMallocFunctionType,
+    free_fn: DuckDBFreeFunctionType,
+) {
+    unsafe {
+        INIT.call_once(|| {
+            ALLOCATOR.malloc = Some(malloc_fn);
+            ALLOCATOR.free = Some(free_fn);
+        });
     }
 }
-
-unsafe impl GlobalAlloc for DuckDBAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        duckdb_malloc(layout.size()) as *mut u8
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        duckdb_free(ptr as *mut c_void);
-    }
-}
-
-#[global_allocator]
-static A: DuckDBAllocator = DuckDBAllocator::new();
