@@ -2,9 +2,20 @@
 
 ---
 
-This extension, `crypto`[1], adds cryptographic hash functions and HMAC to DuckDB's SQL engine.  DuckDB already includes a few functions to calculate hash values, but this extension adds additional algorithms and the ability to calculate HMAC codes.  The implementation of the extension is a bit different than normal, it's written in C++ but calls Rust code directly.
+This extension, `crypto`, adds cryptographic hash functions and the ability to calculate HMAC codes to DuckDB.
 
-[1] - Better naming suggestions
+DuckDB already includes a few functions to calculate hash values, but this extension adds additional hashing algorithms.
+
+## Installation
+
+**`crypto` is a [DuckDB Community Extension](https://github.com/duckdb/community-extensions).**
+
+You can now use this by using this SQL:
+
+```sql
+install crypto from community;
+load crypto;
+```
 
 ## Hash Digests
 
