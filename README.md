@@ -1,7 +1,5 @@
 # Crypto Hash/HMAC Extension for DuckDB
 
----
-
 This extension, `crypto`, adds cryptographic hash functions and the ability to calculate HMAC codes to DuckDB.
 
 DuckDB already includes a few functions to calculate hash values, but this extension adds additional hashing algorithms.
