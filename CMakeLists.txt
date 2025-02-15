@@ -4,6 +4,10 @@ set(CORROSION_VERBOSE_OUTPUT ON)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED 1)
 
+execute_process(
+    COMMAND rustup target list --installed
+    OUTPUT_VARIABLE RUST_TARGETS
+)
 # Propagate arch to rust build for CI
 set(Rust_CARGO_TARGET "")
 if("${OS_NAME}" STREQUAL "linux")
