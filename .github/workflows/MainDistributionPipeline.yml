@@ -22,4 +22,4 @@ jobs:
       ci_tools_version: main
       extension_name: crypto
       enable_rust: true
-      exclude_archs: "windows_amd64_rtools"
+      exclude_archs: "windows_amd64_rtools;windows_amd64_mingw"
