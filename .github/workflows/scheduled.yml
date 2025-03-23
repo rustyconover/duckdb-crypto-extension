@@ -1,4 +1,4 @@
-name: Scheduled Trigger for my-branch
+name: Scheduled Trigger for 1.2
 
 on:
   schedule:
