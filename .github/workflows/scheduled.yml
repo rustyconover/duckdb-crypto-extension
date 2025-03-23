@@ -11,6 +11,9 @@ jobs:
     permissions:
       actions: write  # Allow triggering workflows
     steps:
+      - name: Checkout repository  # Required for gh to work
+        uses: actions/checkout@v4
+
       - name: Install GitHub CLI
         run: |
           sudo apt update && sudo apt install gh -y
